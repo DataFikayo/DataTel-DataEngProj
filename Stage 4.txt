@@ -1,0 +1,35 @@
+Stage 4
+
+Data Warehouse Table
+-- Joins all staging and aggregation tables into one wide table.
+-- stg_customers is the anchor table — every customer appears
+-- in the output even if they have no billing or session history yet.
+-- LEFT JOINs used so new customers with zero activity are kept.
+-- COALESCE wraps every joined metric to convert NULLs to zero,
+-- making the table safe for arithmetic without callers handling NULLs.
+
+Justification for choice of Join
+
+I used LEFT JOINs with stg_customers as the anchor because every customer must appear in the output regardless of whether they have made a transaction or started a session yet. An INNER JOIN would silently drop any customer with no billing or session records — for example a customer who registered yesterday. This would make our customer count wrong and cause newly registered users to disappear from all analytics until they make their first transaction.
+
+CREATE OR REPLACE TABLE `dataengtest-496013.datatel.dw_user_analytics` AS
+SELECT
+  c.customer_id,
+  c.customer_name,
+  c.email,
+  c.country,
+  COALESCE(r.total_revenue, 0) AS total_revenue,
+  COALESCE(r.total_transactions, 0) AS total_transactions,
+  COALESCE(u.total_data_used_mb, 0) AS total_data_used_mb,
+  COALESCE(u.avg_session_duration_sec, 0) AS avg_session_duration_sec,
+  COALESCE(u.total_sessions, 0) AS total_sessions,
+  COALESCE(a.arpu, 0) AS arpu,
+  COALESCE(d.short_sessions, 0) AS short_sessions,
+  COALESCE(d.medium_sessions, 0) AS medium_sessions,
+  COALESCE(d.long_sessions, 0) AS long_sessions,
+  COALESCE(u.total_data_used_mb, 0) / NULLIF(COALESCE(u.total_sessions, 0), 0) AS avg_data_per_session_mb
+FROM `dataengtest-496013.datatel.stg_customers` c
+LEFT JOIN `dataengtest-496013.datatel.agg_user_revenue` r ON c.customer_id = r.customer_id
+LEFT JOIN `dataengtest-496013.datatel.agg_user_usage` u ON c.customer_id = u.customer_id
+LEFT JOIN `dataengtest-496013.datatel.agg_arpu` a ON c.customer_id = a.customer_id
+LEFT JOIN `dataengtest-496013.datatel.agg_session_distribution` d ON c.customer_id = d.customer_id;

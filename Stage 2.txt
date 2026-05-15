@@ -1,0 +1,75 @@
+Stage 2
+
+Notes
+
+-Stage 2: Staging Layer
+-Cleans, deduplicates, and casts types on all 3 source tables.
+-ROW_NUMBER() used for deduplication to keep the most recent record.
+-COALESCE used to replace NULLs with safe defaults.
+-CAST used to convert text dates to proper TIMESTAMP types.
+
+-----------------------------
+
+Stage 2 Query
+
+CREATE OR REPLACE TABLE `dataengtest-496013.datatel.stg_billing` AS
+SELECT
+  transaction_id,
+  customer_id,
+  COALESCE(amount, 0) AS amount,
+  CAST(transaction_date AS TIMESTAMP) AS transaction_ts
+FROM (
+  SELECT *,
+    ROW_NUMBER() OVER (
+      PARTITION BY transaction_id
+      ORDER BY transaction_date DESC
+    ) AS rn
+  FROM `dataengtest-496013.datatel.transactions`
+) sub
+WHERE rn = 1;
+
+
+---------------------------
+
+CREATE OR REPLACE TABLE `dataengtest-496013.datatel.stg_sessions` AS
+SELECT
+  session_id,
+  customer_id,
+  CAST(start_time AS TIMESTAMP) AS start_time,
+  CAST(end_time AS TIMESTAMP) AS end_time,
+  COALESCE(data_used_mb, 0) AS data_used_mb,
+  CASE
+    WHEN CAST(end_time AS TIMESTAMP) > CAST(start_time AS TIMESTAMP)
+    THEN TIMESTAMP_DIFF(
+      CAST(end_time AS TIMESTAMP),
+      CAST(start_time AS TIMESTAMP),
+      SECOND
+    )
+    ELSE 0
+  END AS session_duration_sec
+FROM `dataengtest-496013.datatel.sessions`;
+
+
+------------------------------
+CREATE OR REPLACE TABLE `dataengtest-496013.datatel.stg_customers` AS
+SELECT
+  customer_id,
+  INITCAP(name) AS customer_name,
+  LOWER(email) AS email,
+  COALESCE(country, 'Nigeria') AS country,
+  CAST(created_at AS TIMESTAMP) AS created_at
+FROM `dataengtest-496013.datatel.customer_table`;
+
+
+
+
+
+
+
+
+
+
+
+
+
+

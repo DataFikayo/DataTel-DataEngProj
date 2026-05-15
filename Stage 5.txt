@@ -1,0 +1,64 @@
+Stage 5
+
+ Analytical Queries
+-- Four business questions answered directly from dw_user_analytics.
+-- Query 1: Top 10 customers by lifetime revenue
+-- Query 2: Customer segmentation by revenue bands
+-- Query 3: Churn risk flagging by session and revenue thresholds
+-- Query 4: Revenue vs usage mismatch detection
+
+
+SELECT 
+  customer_id,
+  customer_name,
+  total_revenue
+FROM `dataengtest-496013.datatel.dw_user_analytics`
+ORDER BY total_revenue DESC
+LIMIT 10;
+
+---------------------------
+
+SELECT
+  customer_id,
+  customer_name,
+  total_revenue,
+  CASE
+    WHEN total_revenue > 5000000 THEN 'High Value'
+    WHEN total_revenue > 1000000 THEN 'Mid Value'
+    ELSE 'Low Value'
+  END AS customer_segment
+FROM `dataengtest-496013.datatel.dw_user_analytics`
+ORDER BY total_revenue DESC;
+
+-------------------------
+
+Justification:
+The current churn rule flags any customer with fewer than 5 sessions AND less than ₦1,000 in revenue as High Risk. The weakness is that a brand new customer who registered yesterday would also have 0 sessions and 0 revenue — they are not at risk of churning, they just haven't started yet. To fix this I would add an account age condition: only flag customers whose account is older than 30 days but still shows low activity. This makes the rule target genuinely inactive customers rather than new ones.
+
+SELECT
+  customer_id,
+  customer_name,
+  total_sessions,
+  total_revenue,
+  CASE
+    WHEN total_sessions < 5 AND total_revenue < 1000 THEN 'High Risk'
+    ELSE 'Active'
+  END AS churn_risk
+FROM `dataengtest-496013.datatel.dw_user_analytics`
+ORDER BY churn_risk DESC;
+
+------------------------------------
+SELECT
+  customer_id,
+  customer_name,
+  total_data_used_mb,
+  total_revenue
+FROM `dataengtest-496013.datatel.dw_user_analytics`
+WHERE total_data_used_mb > 10000
+  AND total_revenue < 500
+ORDER BY total_data_used_mb DESC;
+
+---------------------------------------
+
+
+

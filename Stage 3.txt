@@ -1,0 +1,75 @@
+Stage 3 
+
+Transformation Layer
+-- Builds 5 aggregation tables from the clean staging tables.
+-- agg_user_revenue: total revenue and transactions per customer
+-- agg_user_usage: total data, avg session duration, session count per customer
+-- agg_monthly_revenue: revenue broken down by calendar month per customer
+-- agg_arpu: average revenue per user per active month
+--           NULLIF used to prevent divide-by-zero for customers with no transactions
+-- session_buckets: labels each session as short/medium/long by duration
+-- agg_session_distribution: counts of each session type per customer
+
+CREATE OR REPLACE TABLE `dataengtest-496013.datatel.agg_user_revenue` AS
+SELECT
+  customer_id,
+  SUM(amount) AS total_revenue,
+  COUNT(*) AS total_transactions
+FROM `dataengtest-496013.datatel.stg_billing`
+GROUP BY customer_id;
+
+-------------------------
+
+CREATE OR REPLACE TABLE `dataengtest-496013.datatel.agg_user_usage` AS
+SELECT
+  customer_id,
+  SUM(data_used_mb) AS total_data_used_mb,
+  AVG(session_duration_sec) AS avg_session_duration_sec,
+  COUNT(*) AS total_sessions
+FROM `dataengtest-496013.datatel.stg_sessions`
+GROUP BY customer_id;
+
+---------------------
+
+CREATE OR REPLACE TABLE `dataengtest-496013.datatel.agg_monthly_revenue` AS
+SELECT
+  customer_id,
+  DATE_TRUNC(transaction_ts, MONTH) AS month,
+  SUM(amount) AS monthly_revenue
+FROM `dataengtest-496013.datatel.stg_billing`
+GROUP BY customer_id, DATE_TRUNC(transaction_ts, MONTH);
+
+---------------------------------
+CREATE OR REPLACE TABLE `dataengtest-496013.datatel.agg_arpu` AS
+SELECT
+  customer_id,
+  SUM(monthly_revenue) / NULLIF(COUNT(DISTINCT month), 0) AS arpu
+FROM `dataengtest-496013.datatel.agg_monthly_revenue`
+GROUP BY customer_id;
+
+------------------
+CREATE OR REPLACE TABLE `dataengtest-496013.datatel.session_buckets` AS
+SELECT
+  *,
+  CASE
+    WHEN session_duration_sec < 60 THEN 'short'
+    WHEN session_duration_sec < 300 THEN 'medium'
+    ELSE 'long'
+  END AS session_type
+FROM `dataengtest-496013.datatel.stg_sessions`;
+
+---------------------------------
+
+CREATE OR REPLACE TABLE `dataengtest-496013.datatel.agg_session_distribution` AS
+SELECT
+  customer_id,
+  COUNTIF(session_type = 'short') AS short_sessions,
+  COUNTIF(session_type = 'medium') AS medium_sessions,
+  COUNTIF(session_type = 'long') AS long_sessions
+FROM `dataengtest-496013.datatel.session_buckets`
+GROUP BY customer_id;
+
+
+
+
+

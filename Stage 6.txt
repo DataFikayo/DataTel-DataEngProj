@@ -1,0 +1,39 @@
+Stage 6
+
+Incremental Loading
+-- Instead of rebuilding stg_billing from scratch on every run,
+-- this INSERT only adds rows newer than the latest timestamp
+-- already present in stg_billing.
+-- A scalar subquery dynamically fetches MAX(transaction_ts)
+-- so no date is ever hardcoded.
+-- The freshness check confirms the pipeline ran and data is not stale.
+
+Justification
+The incremental pattern works by comparing the source timestamp against the maximum timestamp already loaded in the staging table. Only rows newer than that max value get inserted. This avoids reprocessing the entire history on every run, which becomes expensive as data grows.
+
+
+To extend this to stg_sessions I would apply the same pattern: insert rows from the sessions table where CAST(start_time AS TIMESTAMP) is greater than SELECT MAX(start_time) FROM stg_sessions. The logic is identical — only the table name and timestamp column change.
+
+------------
+Query 1 — Incremental INSERT for stg_billing
+Instead of rebuilding stg_billing from scratch every day, this only adds rows that are newer than what's already loaded.
+
+INSERT INTO `dataengtest-496013.datatel.stg_billing`
+SELECT
+  transaction_id,
+  customer_id,
+  COALESCE(amount, 0) AS amount,
+  CAST(transaction_date AS TIMESTAMP) AS transaction_ts
+FROM `dataengtest-496013.datatel.transactions`
+WHERE CAST(transaction_date AS TIMESTAMP) > (
+  SELECT MAX(transaction_ts) 
+  FROM `dataengtest-496013.datatel.stg_billing`
+);
+
+-----------------------------------
+
+Query 2 — Freshness check
+Run this after the INSERT to confirm the pipeline loaded new data successfully.
+
+SELECT MAX(transaction_ts) AS last_loaded
+FROM `dataengtest-496013.datatel.stg_billing`;

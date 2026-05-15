@@ -1,0 +1,42 @@
+Stage 1 
+
+Notes
+
+Null Checks:
+
+Both transactions and sessions tables returned zero null rows for their primary identifier columns (transaction_id, session_id, customer_id). No null risk found at this stage.
+
+Duplicate Checks:
+
+The transactions table contains 30,000 duplicate transaction_id values, each appearing exactly twice. This was caused by retry events in the billing system. If not removed, these duplicates would double-count revenue — a customer who paid ₦5,000 once would appear to have paid ₦10,000.
+
+
+The sessions table also contains duplicate session_id values appearing twice each, caused by logging retries. If not removed, session counts and data usage totals would be inflated, making customers look more active than they actually are.
+
+
+
+Stage 1 Query
+
+Query 1 — Null check on billing:
+sqlSELECT *
+FROM `dataengtest-496013.datatel.transactions`
+WHERE transaction_id IS NULL
+   OR customer_id IS NULL;
+
+Query 2 — Null check on sessions:
+sqlSELECT *
+FROM `dataengtest-496013.datatel.sessions`
+WHERE session_id IS NULL
+   OR customer_id IS NULL;
+
+Query 3 — Duplicate check on billing:
+sqlSELECT transaction_id, COUNT(*) AS how_many
+FROM `dataengtest-496013.datatel.transactions`
+GROUP BY transaction_id
+HAVING COUNT(*) > 1;
+
+Query 4 — Duplicate check on sessions:
+sqlSELECT session_id, COUNT(*) AS how_many
+FROM `dataengtest-496013.datatel.sessions`
+GROUP BY session_id
+HAVING COUNT(*) > 1;
